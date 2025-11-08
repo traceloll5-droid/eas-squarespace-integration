@@ -7,7 +7,7 @@ export default async function handler(req, res) {
   try {
     const order = req.body?.data?.object;
     if (!order || order.financialStatus !== 'PAID') {
-      return res.status(200).json({ ignored: true });
+      return res.status(200).json({ status: 'ignored' });
     }
 
     const payload = {
@@ -15,19 +15,19 @@ export default async function handler(req, res) {
       order_number: order.orderNumber || order.id,
       created_at: order.createdOn,
       customer: { email: order.customerEmail },
-      billing_address: { country_code: order.billingAddress?.countryCode || '' },
-      shipping_address: { country_code: order.shippingAddress?.countryCode || '' },
-      line_items: order.lineItems.map(i => ({
-        title: i.productName,
-        quantity: i.quantity,
-        price: parseFloat(i.unitPricePaid.value)
+      billing_address: { country_code: order.billingAddress?.countryCode || 'US' },
+      shipping_address: { country_code: order.shippingAddress?.countryCode || 'US' },
+      line_items: order.lineItems.map(item => ({
+        title: item.productName,
+        quantity: item.quantity,
+        price: parseFloat(item.unitPricePaid.value)
       })),
       grand_total: parseFloat(order.grandTotal.value),
       currency: order.grandTotal.currency,
       financial_status: 'paid'
     };
 
-    const easResponse = await fetch('https://manager.easproject.com/api/v2/orders/import', {
+    const response = await fetch('https://manager.easproject.com/api/v2/orders/import', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -36,16 +36,15 @@ export default async function handler(req, res) {
       body: JSON.stringify(payload)
     });
 
-    if (easResponse.ok) {
-      console.log('EAS: ORDER IMPORTED SUCCESSFULLY');
+    if (response.ok) {
       return res.status(200).json({ success: true });
     } else {
-      const err = await easResponse.text();
-      console.error('EAS REJECTED:', err);
-      return res.status(500).json({ error: 'EAS import failed', details: err });
+      const errorText = await response.text();
+      console.error('EAS ERROR:', errorText);
+      return res.status(500).json({ error: 'EAS rejected', details: errorText });
     }
-  } catch (error) {
-    console.error('FATAL CRASH:', error);
-    return res.status(500).json({ error: 'Server crashed', details: error.message });
+  } catch (err) {
+    console.error('CRASH:', err);
+    return res.status(500).json({ error: 'Server error', message: err.message });
   }
 }
